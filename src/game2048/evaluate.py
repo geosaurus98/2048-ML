@@ -112,11 +112,14 @@ def main(argv=None):
     parser.add_argument("--agent", choices=sorted(AGENTS), default="random")
     parser.add_argument("--games", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--checkpoint", default=None, help="model checkpoint (for learned agents)")
     args = parser.parse_args(argv)
 
-    agent = AGENTS[args.agent]()
+    kwargs = {"checkpoint": args.checkpoint} if args.checkpoint else {}
+    agent = AGENTS[args.agent](**kwargs)
     result = evaluate(agent, n_games=args.games, seed=args.seed)
-    print(f"Agent: {args.agent}  seed: {args.seed}\n")
+    source = f"  checkpoint: {args.checkpoint}" if args.checkpoint else ""
+    print(f"Agent: {args.agent}  seed: {args.seed}{source}\n")
     print(result.summary())
 
 

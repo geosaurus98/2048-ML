@@ -23,8 +23,17 @@ class RandomAgent:
         return int(self.rng.choice(legal))
 
 
+def _dqn_agent(checkpoint=None, **kwargs):
+    if checkpoint is None:
+        raise ValueError("the dqn agent needs --checkpoint")
+    from game2048.dqn import DQNAgent  # lazy: keeps torch out of non-DQN imports
+
+    return DQNAgent(checkpoint, **kwargs)
+
+
 AGENTS = {
     "random": RandomAgent,
     "expectimax": ExpectimaxAgent,  # depth 2
     "expectimax-d3": partial(ExpectimaxAgent, depth=3),
+    "dqn": _dqn_agent,
 }
