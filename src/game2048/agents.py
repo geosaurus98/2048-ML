@@ -31,9 +31,18 @@ def _dqn_agent(checkpoint=None, **kwargs):
     return DQNAgent(checkpoint, **kwargs)
 
 
+def _ntuple_agent(checkpoint=None):
+    if checkpoint is None:
+        raise ValueError("the ntuple agent needs --checkpoint")
+    from game2048.ntuple import NTupleAgent
+
+    return NTupleAgent(checkpoint)
+
+
 AGENTS = {
     "random": RandomAgent,
     "expectimax": ExpectimaxAgent,  # depth 2
     "expectimax-d3": partial(ExpectimaxAgent, depth=3),
     "dqn": _dqn_agent,
+    "ntuple": _ntuple_agent,
 }

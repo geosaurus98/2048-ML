@@ -16,3 +16,5 @@ packages = ["src/game2048"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+# n-tuple tests write 268 MB checkpoints; keep tmp dirs only for failed tests
+tmp_path_retention_policy = "failed"
