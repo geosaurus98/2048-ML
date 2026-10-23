@@ -1,0 +1,413 @@
+<title>2048 Agent Replays</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: four boards race through the same seeded deal; one move clock drives them all. */
+:root {
+  --bg: #eef0ec;
+  --panel: #fbfcfa;
+  --ink: #1d221f;
+  --ink-2: #565e58;
+  --line: #d5dad4;
+  --well: #d9ddd5;
+  --cell: #e7eae3;
+  --accent: #2f6f5e;
+  --accent-ink: #ffffff;
+  --warn-bg: #fbe9d3;
+  --warn-ink: #7a3d00;
+  --tile-l-shift: 0;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151917; --panel: #1d2220; --ink: #e8ece8; --ink-2: #a3aca6; --line: #2f3632;
+    --well: #2a302d; --cell: #343b37; --accent: #6cc3a8; --accent-ink: #0f1a16;
+    --warn-bg: #3d2a14; --warn-ink: #f6c98e; --tile-l-shift: -8; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151917; --panel: #1d2220; --ink: #e8ece8; --ink-2: #a3aca6; --line: #2f3632;
+  --well: #2a302d; --cell: #343b37; --accent: #6cc3a8; --accent-ink: #0f1a16;
+  --warn-bg: #3d2a14; --warn-ink: #f6c98e; --tile-l-shift: -8; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: grid; gap: 4px; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.4rem);
+     letter-spacing: -0.02em; margin: 0; text-wrap: balance; line-height: 1.1; }
+.lede { color: var(--ink-2); margin: 0; max-width: 68ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.seeds { display: flex; flex-wrap: wrap; gap: 4px; }
+button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 10px; cursor: pointer; font-variant-numeric: tabular-nums; }
+button:hover { border-color: var(--ink-2); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#play { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 84px; font-weight: 600; }
+.speed-val, .clock { font-family: var(--font-data); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+input[type="range"] { accent-color: var(--accent); }
+#speed { width: 130px; }
+.scrub { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+#scrub { flex: 1; min-width: 0; }
+
+.warn { background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--radius); padding: 10px 14px; }
+
+.boards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.agent { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; margin: 0; line-height: 1.2; }
+.pill { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
+.pill.lead { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pill.over { border-style: dashed; }
+.ref { color: var(--ink-2); font-size: 12.5px; margin: -6px 0 0; min-height: 1.2em; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stat { display: grid; gap: 0; min-width: 0; }
+.stat .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.stat .v { font-family: var(--font-data); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.board { position: relative; background: var(--well); border-radius: 9px; padding: 7px; aspect-ratio: 1; max-width: 100%;
+  display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); gap: 7px;
+  container-type: inline-size; }
+.tile { border-radius: 6px; background: var(--cell); display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; line-height: 1;
+  font-size: 9cqi; font-variant-numeric: tabular-nums; }
+.tile[data-digits="3"] { font-size: 7.6cqi; }
+.tile[data-digits="4"] { font-size: 6.2cqi; }
+.tile[data-digits="5"] { font-size: 5cqi; }
+.tile.pop { animation: pop 140ms ease-out; }
+.tile.spawn { animation: spawn 140ms ease-out; }
+@keyframes pop { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes spawn { 0% { transform: scale(0.4); opacity: 0.2; } 100% { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tile.pop, .tile.spawn { animation: none; } }
+.done-veil { position: absolute; inset: 0; border-radius: 9px; display: grid; place-items: center; text-align: center;
+  background: color-mix(in srgb, var(--panel) 72%, transparent); padding: 12px; }
+.done-veil strong { font-family: var(--font-display); font-size: 1.35rem; display: block; }
+.done-veil span { color: var(--ink-2); font-size: 13px; font-family: var(--font-data); }
+
+footer { color: var(--ink-2); font-size: 12.5px; max-width: 90ch; }
+footer kbd { font-family: var(--font-data); font-size: 11.5px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>2048 Agent Replays</h1>
+    <p class="lede">Four agents play the same seeded game. Each board replays recorded moves and tile spawns, one move per tick, so you can watch where their play diverges.</p>
+  </header>
+
+  <div id="warn" class="warn" hidden></div>
+
+  <section class="controls" aria-label="Playback controls">
+    <div class="group">
+      <span class="label" id="seed-label">Game</span>
+      <div class="seeds" id="seeds" role="group" aria-labelledby="seed-label"></div>
+    </div>
+    <div class="group">
+      <button id="play" type="button">Play</button>
+      <button id="back" type="button" aria-label="Step back one move">−1</button>
+      <button id="fwd" type="button" aria-label="Step forward one move">+1</button>
+      <button id="restart" type="button">Restart</button>
+    </div>
+    <div class="group">
+      <label class="label" for="speed">Speed</label>
+      <input id="speed" type="range" min="0" max="100" value="38">
+      <span class="speed-val" id="speed-val"></span>
+    </div>
+    <div class="scrub">
+      <label class="label" for="scrub">Move</label>
+      <input id="scrub" type="range" min="0" max="0" value="0">
+      <span class="clock" id="clock"></span>
+    </div>
+  </section>
+
+  <section class="boards" id="boards" aria-live="off"></section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = /*__REPLAY_DATA__*/null;
+const SPAWN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef";
+const ARROWS = ["↑", "→", "↓", "←"];
+const MAX_EXP = 15;
+
+// Same rules as src/game2048/engine.py: slide toward the move direction, each tile
+// merges at most once, two 32768s (exponent 15) do not merge.
+const LINES = (() => {
+  const L = [[], [], [], []];
+  for (let k = 0; k < 4; k++) {
+    L[0].push([k, 4 + k, 8 + k, 12 + k]);             // up: column, top first
+    L[1].push([4 * k + 3, 4 * k + 2, 4 * k + 1, 4 * k]); // right: row, right first
+    L[2].push([12 + k, 8 + k, 4 + k, k]);             // down: column, bottom first
+    L[3].push([4 * k, 4 * k + 1, 4 * k + 2, 4 * k + 3]); // left: row, left first
+  }
+  return L;
+})();
+
+function applyMove(board, action) {
+  const out = board.slice();
+  let reward = 0, moved = false;
+  const merged = [];
+  for (const line of LINES[action]) {
+    const tiles = line.map(i => board[i]).filter(v => v !== 0);
+    const res = [];
+    for (let i = 0; i < tiles.length; i++) {
+      if (i + 1 < tiles.length && tiles[i] === tiles[i + 1] && tiles[i] < MAX_EXP) {
+        res.push(tiles[i] + 1); reward += 2 ** (tiles[i] + 1);
+        merged.push(line[res.length - 1]); i++;
+      } else res.push(tiles[i]);
+    }
+    for (let j = 0; j < 4; j++) {
+      const v = j < res.length ? res[j] : 0;
+      if (out[line[j]] !== v) moved = true;
+      out[line[j]] = v;
+    }
+  }
+  return { board: out, reward, moved, merged };
+}
+
+function stepRecord(state, game) {
+  const t = state.moves;
+  const a = +game.actions[t];
+  const r = applyMove(state.board, a);
+  const idx = SPAWN_ALPHABET.indexOf(game.spawns[t]);
+  const cell = idx >> 1;
+  r.board[cell] = (idx & 1) + 1;
+  return { board: r.board, score: state.score + r.reward, moves: t + 1, lastAction: a,
+           lastReward: r.reward, merged: r.merged, spawn: cell, moved: r.moved };
+}
+
+function initialState(game) {
+  return { board: game.start.slice(), score: 0, moves: 0, lastAction: -1, lastReward: 0,
+           merged: [], spawn: -1, moved: true };
+}
+
+function verifyAll() {
+  const bad = [];
+  for (const agent of DATA.agents) for (const g of agent.games) {
+    let s = initialState(g);
+    for (let t = 0; t < g.actions.length; t++) {
+      s = stepRecord(s, g);
+      if (!s.moved) { bad.push(`${agent.name} seed ${g.seed}: illegal move at ${t + 1}`); break; }
+    }
+    if (s.score !== g.score || s.board.join() !== g.final.join()) bad.push(`${agent.name} seed ${g.seed}: replay differs from recording`);
+  }
+  return bad;
+}
+
+// ---- tile colours: one ramp from pale sage through amber and coral to deep plum
+const RAMP = [
+  [96, 18, 88], [70, 40, 84], [48, 70, 76], [36, 78, 68], [22, 78, 62], [8, 70, 58],
+  [352, 62, 52], [338, 56, 46], [322, 50, 42], [300, 42, 38], [282, 40, 34], [266, 42, 30],
+  [250, 44, 27], [236, 48, 24], [222, 50, 22],
+];
+function tileStyle(exp) {
+  const shift = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tile-l-shift")) || 0;
+  const [h, s, l] = RAMP[Math.min(exp, RAMP.length) - 1];
+  const light = l + (l > 60 ? shift : 0);
+  return { bg: `hsl(${h} ${s}% ${light}%)`, fg: light > 58 ? "#2a2620" : "#fdfbf7" };
+}
+
+// ---- view
+const els = {
+  seeds: document.getElementById("seeds"), boards: document.getElementById("boards"),
+  play: document.getElementById("play"), back: document.getElementById("back"), fwd: document.getElementById("fwd"),
+  restart: document.getElementById("restart"), speed: document.getElementById("speed"),
+  speedVal: document.getElementById("speed-val"), scrub: document.getElementById("scrub"),
+  clock: document.getElementById("clock"), warn: document.getElementById("warn"), foot: document.getElementById("foot"),
+};
+const fmt = n => n.toLocaleString("en-US");
+const tileValue = e => (e ? 2 ** e : 0);
+
+let gameIdx = 0, t = 0, playing = false, carry = 0, lastTs = 0;
+let states = [];   // per agent: state after min(t, len) moves
+let cards = [];
+
+function speedMovesPerSec() {
+  // 0..100 on a log scale: 1 to 1000 moves per second
+  return Math.round(10 ** (els.speed.value / 100 * 3));
+}
+function maxLen() { return Math.max(...DATA.agents.map(a => a.games[gameIdx].actions.length)); }
+
+function buildSeeds() {
+  els.seeds.innerHTML = "";
+  DATA.seeds.forEach((seed, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = `Seed ${seed}`; b.id = `seed-${seed}`;
+    b.setAttribute("aria-pressed", String(i === gameIdx));
+    b.addEventListener("click", () => selectGame(i));
+    els.seeds.append(b);
+  });
+}
+
+function buildCards() {
+  els.boards.innerHTML = "";
+  cards = DATA.agents.map(agent => {
+    const card = document.createElement("article");
+    card.className = "card";
+    const sum = agent.summary;
+    card.innerHTML = `
+      <div class="card-head"><h2 class="agent"></h2><span class="pill"></span></div>
+      <p class="ref"></p>
+      <div class="stats">
+        <div class="stat"><span class="k">Score</span><span class="v" data-k="score"></span></div>
+        <div class="stat"><span class="k">Moves</span><span class="v" data-k="moves"></span></div>
+        <div class="stat"><span class="k">Max tile</span><span class="v" data-k="max"></span></div>
+        <div class="stat"><span class="k">Last move</span><span class="v" data-k="last"></span></div>
+      </div>
+      <div class="board"></div>`;
+    card.querySelector(".agent").textContent = agent.name;
+    card.querySelector(".ref").textContent = sum
+      ? `Over ${fmt(sum.games)} games: mean ${fmt(Math.round(sum.mean))}, 2048 in ${sum.pct2048}%` : "";
+    const board = card.querySelector(".board");
+    const tiles = [];
+    for (let i = 0; i < 16; i++) { const d = document.createElement("div"); d.className = "tile"; board.append(d); tiles.push(d); }
+    const veil = document.createElement("div"); veil.className = "done-veil"; veil.hidden = true; board.append(veil);
+    els.boards.append(card);
+    return { card, tiles, veil, pill: card.querySelector(".pill"),
+             v: Object.fromEntries([...card.querySelectorAll("[data-k]")].map(e => [e.dataset.k, e])) };
+  });
+}
+
+function recompute() {
+  states = DATA.agents.map(agent => {
+    const g = agent.games[gameIdx];
+    let s = initialState(g);
+    const upto = Math.min(t, g.actions.length);
+    for (let k = 0; k < upto; k++) s = stepRecord(s, g);
+    return s;
+  });
+}
+
+function advance(n) {
+  const len = maxLen();
+  for (let k = 0; k < n && t < len; k++) {
+    t++;
+    DATA.agents.forEach((agent, i) => {
+      const g = agent.games[gameIdx];
+      if (states[i].moves < g.actions.length) states[i] = stepRecord(states[i], g);
+    });
+  }
+  if (t >= len) setPlaying(false);
+}
+
+function render(animate) {
+  const len = maxLen();
+  els.scrub.max = len; els.scrub.value = t;
+  els.clock.textContent = `${fmt(t)} / ${fmt(len)}`;
+  const live = states.map((s, i) => s.moves < DATA.agents[i].games[gameIdx].actions.length);
+  const best = Math.max(...states.map(s => s.score));
+  states.forEach((s, i) => {
+    const c = cards[i], g = DATA.agents[i].games[gameIdx];
+    const finished = !live[i];
+    const maxExp = Math.max(...s.board);
+    c.v.score.textContent = fmt(s.score);
+    c.v.moves.textContent = fmt(s.moves);
+    c.v.max.textContent = fmt(tileValue(maxExp));
+    c.v.last.textContent = s.lastAction < 0 ? "–" : `${ARROWS[s.lastAction]}${s.lastReward ? " +" + fmt(s.lastReward) : ""}`;
+    const leading = best > 0 && s.score === best && states.filter(x => x.score === best).length === 1;
+    c.pill.textContent = finished ? "Game over" : leading ? "Leading" : "Playing";
+    c.pill.className = "pill" + (finished ? " over" : leading ? " lead" : "");
+    const merged = new Set(animate ? s.merged : []);
+    s.board.forEach((e, k) => {
+      const el = c.tiles[k];
+      el.classList.remove("pop", "spawn");
+      if (e === 0) { el.textContent = ""; el.style.background = ""; el.style.color = ""; el.removeAttribute("data-digits"); return; }
+      const v = String(tileValue(e)); const st = tileStyle(e);
+      el.textContent = v; el.dataset.digits = String(Math.max(2, v.length));
+      el.style.background = st.bg; el.style.color = st.fg;
+      if (animate && s.moves > 0 && live[i] !== undefined) {
+        if (k === s.spawn) { void el.offsetWidth; el.classList.add("spawn"); }
+        else if (merged.has(k)) { void el.offsetWidth; el.classList.add("pop"); }
+      }
+    });
+    c.veil.hidden = !finished;
+    if (finished) c.veil.innerHTML = `<div><strong>Game over</strong><span>${fmt(s.moves)} moves · score ${fmt(s.score)} · max ${fmt(tileValue(maxExp))}</span></div>`;
+    c.card.setAttribute("aria-label", `${DATA.agents[i].name}: score ${fmt(s.score)}, ${finished ? "game over" : "playing"}`);
+  });
+}
+
+function setPlaying(p) {
+  playing = p;
+  els.play.textContent = p ? "Pause" : t >= maxLen() ? "Replay" : "Play";
+  if (p) { lastTs = 0; carry = 0; requestAnimationFrame(tick); }
+}
+
+function tick(ts) {
+  if (!playing) return;
+  if (lastTs) {
+    carry += (ts - lastTs) / 1000 * speedMovesPerSec();
+    const n = Math.floor(carry);
+    if (n > 0) { carry -= n; advance(n); render(n === 1 && speedMovesPerSec() <= 30); }
+  }
+  lastTs = ts;
+  if (playing) requestAnimationFrame(tick);
+}
+
+function selectGame(i) {
+  gameIdx = i; t = 0; recompute();
+  [...els.seeds.children].forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
+  render(false);
+}
+
+function seek(target) {
+  t = Math.max(0, Math.min(maxLen(), target)); recompute(); render(false);
+}
+
+function updateSpeedLabel() { els.speedVal.textContent = `${fmt(speedMovesPerSec())} moves/s`; }
+
+function start(saved) {
+  if (!DATA) { els.warn.hidden = false; els.warn.textContent = "No recorded games were embedded in this page."; return; }
+  const bad = verifyAll();
+  if (bad.length) { els.warn.hidden = false; els.warn.textContent = `Replay check failed: ${bad.slice(0, 3).join("; ")}`; }
+  gameIdx = Math.min(saved.gameIdx ?? 0, DATA.seeds.length - 1);
+  if (saved.speed != null) els.speed.value = saved.speed;
+  buildSeeds(); buildCards(); updateSpeedLabel();
+  t = 0; recompute();
+  if (saved.t) t = Math.min(saved.t, maxLen()), recompute();
+  render(false);
+  els.foot.innerHTML = `Recorded from the trained agents in this repo (<code>scripts/record_games.py</code>); every replay is re-simulated and checked against its recorded final board on load. Game <em>i</em> uses the same spawn seed for all agents, so boards start identical and drift apart as the agents choose different moves. Keys: <kbd>Space</kbd> play/pause, <kbd>←</kbd> <kbd>→</kbd> step.`;
+  setPlaying(!!saved.playing);
+}
+
+els.play.addEventListener("click", () => {
+  if (!playing && t >= maxLen()) { seek(0); }
+  setPlaying(!playing);
+});
+els.back.addEventListener("click", () => { setPlaying(false); seek(t - 1); });
+els.fwd.addEventListener("click", () => { setPlaying(false); advance(1); render(true); });
+els.restart.addEventListener("click", () => { seek(0); setPlaying(true); });
+els.speed.addEventListener("input", updateSpeedLabel);
+els.scrub.addEventListener("input", () => seek(+els.scrub.value));
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.code === "Space") { e.preventDefault(); els.play.click(); }
+  else if (e.key === "ArrowRight" && e.target.type !== "range") { e.preventDefault(); els.fwd.click(); }
+  else if (e.key === "ArrowLeft" && e.target.type !== "range") { e.preventDefault(); els.back.click(); }
+});
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+darkQuery.addEventListener?.("change", () => render(false));
+new MutationObserver(() => render(false)).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+window.claude?.hot?.snapshot?.(() => ({ gameIdx, t, speed: els.speed.value, playing }));
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
