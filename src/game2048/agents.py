@@ -1,8 +1,11 @@
 """Agents. Every agent exposes `act(board) -> action` and only returns legal moves."""
 
+from functools import partial
+
 import numpy as np
 
 from game2048.engine import legal_moves
+from game2048.expectimax import ExpectimaxAgent
 
 
 class RandomAgent:
@@ -22,4 +25,6 @@ class RandomAgent:
 
 AGENTS = {
     "random": RandomAgent,
+    "expectimax": ExpectimaxAgent,  # depth 2
+    "expectimax-d3": partial(ExpectimaxAgent, depth=3),
 }
