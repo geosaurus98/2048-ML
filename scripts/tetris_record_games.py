@@ -7,7 +7,9 @@ tetris.engine and checks every game against its recorded final board on load.
 
   uv run python scripts/tetris_record_games.py --games 10
 writes runs/tetris_replays.json and runs/tetris_viewer.html. Use --height 10 to
-record on the small board, where good agents also top out eventually.
+record on the small board, where good agents also top out eventually, and
+--out-dir to keep several versions, e.g.
+  uv run python scripts/tetris_record_games.py --max-pieces 100000 --out-dir runs/compare_100k
 """
 
 import argparse
@@ -99,14 +101,17 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--height", type=int, default=HEIGHT, help="board height (width is always 10)")
     parser.add_argument("--max-pieces", type=int, default=MAX_PIECES, help="cap on placements per game")
-    parser.add_argument("--run-dir", default="runs")
+    parser.add_argument("--run-dir", default="runs", help="where checkpoints are found")
+    parser.add_argument("--out-dir", default=None,
+                        help="where the replays and viewer go (default: --run-dir); a tetris_compare.csv "
+                             "there is used for the per-agent summaries")
     parser.add_argument("--cem-checkpoint", default=None)
     parser.add_argument("--dqn-checkpoint", default=None)
     args = parser.parse_args(argv)
-    run_dir = Path(args.run_dir)
+    run_dir = Path(args.out_dir or args.run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    summaries = compare_summaries(run_dir, args.height)
+    summaries = compare_summaries(run_dir, args.height) or compare_summaries(args.run_dir, args.height)
     agents = []
     for name, make, ckpt in build_agents(args):
         print(f"recording {name} ...", flush=True)

@@ -130,7 +130,7 @@ footer kbd { font-family: var(--font-data); font-size: 11.5px; border: 1px solid
     </div>
     <div class="group">
       <label class="label" for="speed">Speed</label>
-      <input id="speed" type="range" min="0" max="100" value="38">
+      <input id="speed" type="range" min="0" max="100" value="30">
       <span class="speed-val" id="speed-val"></span>
     </div>
     <div class="scrub">
@@ -215,18 +215,26 @@ function initialState() {
            fresh: [], ok: true };
 }
 
+// Snapshots every SNAP placements, taken while verifying, so seeking in long games
+// replays at most SNAP placements per agent instead of the whole game.
+const SNAP = 1000;
+let snaps = [];  // snaps[agent][game][k] = state after k * SNAP placements
+
 function verifyAll() {
   const bad = [];
-  for (const agent of DATA.agents) for (const g of agent.games) {
+  snaps = DATA.agents.map(() => []);
+  DATA.agents.forEach((agent, ai) => agent.games.forEach((g, gi) => {
     let s = initialState();
+    const keep = snaps[ai][gi] = [s];
     for (let t = 0; t < g.pieces.length; t++) {
       s = stepRecord(s, g);
+      if ((t + 1) % SNAP === 0) keep.push(s);
       if (!s.ok && t !== g.pieces.length - 1) { bad.push(`${agent.name} seed ${g.seed}: topped out early at ${t + 1}`); break; }
     }
     const final = s.board.map(v => (v ? 1 : 0)).join();
     if (s.lines !== g.lines || final !== g.final.join() || s.ok === g.topped_out)
       bad.push(`${agent.name} seed ${g.seed}: replay differs from recording`);
-  }
+  }));
   return bad;
 }
 
@@ -251,8 +259,8 @@ let states = [];   // per agent: state after min(t, len) placements
 let cards = [];
 
 function speedPiecesPerSec() {
-  // 0..100 on a log scale: 1 to 1000 pieces per second
-  return Math.round(10 ** (els.speed.value / 100 * 3));
+  // 0..100 on a log scale: 1 to 10,000 pieces per second
+  return Math.round(10 ** (els.speed.value / 100 * 4));
 }
 function maxLen() { return Math.max(...DATA.agents.map(a => a.games[gameIdx].pieces.length)); }
 
@@ -307,11 +315,12 @@ function buildCards() {
 }
 
 function recompute() {
-  states = DATA.agents.map(agent => {
+  states = DATA.agents.map((agent, ai) => {
     const g = agent.games[gameIdx];
-    let s = initialState();
     const upto = Math.min(t, g.pieces.length);
-    for (let k = 0; k < upto; k++) s = stepRecord(s, g);
+    const keep = snaps[ai][gameIdx];
+    let s = keep[Math.min(Math.floor(upto / SNAP), keep.length - 1)];
+    while (s.steps < upto) s = stepRecord(s, g);
     return s;
   });
 }
