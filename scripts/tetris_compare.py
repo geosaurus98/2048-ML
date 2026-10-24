@@ -9,7 +9,7 @@ agent plays games seeded seed, seed+1, ..., seed+n-1: game i draws the same
 piece sequence for every agent.
 
   uv run python scripts/tetris_compare.py --games 100
-writes runs/tetris_compare.csv (one row per agent and board),
+(--max-pieces sets one cap for both boards) writes runs/tetris_compare.csv (one row per agent and board),
 runs/tetris_compare_games.csv (one row per agent, board and game) and
 runs/tetris_compare_lines.png.
 
@@ -88,7 +88,7 @@ def ci95(r):
 
 
 def summary_row(name, ckpt, board, r):
-    height, max_pieces = BOARDS[board]
+    height, max_pieces = BOARDS[board][0], r.max_pieces
     row = {
         "agent": name,
         "checkpoint": ckpt,
@@ -118,6 +118,7 @@ def plot_lines(results, out_path):
     axes = np.atleast_1d(axes)
     for ax, board in zip(axes, boards):
         rows = [(name, r) for name, b, r in results if b == board]
+        survived = any(r.survival_pct > 0 for _, r in rows)  # the cap mattered on this board
         names = [n for n, _ in rows][::-1]
         means = np.array([r.mean_lines for _, r in rows])[::-1]
         errs = np.array([ci95(r) for _, r in rows])[::-1]
@@ -127,13 +128,13 @@ def plot_lines(results, out_path):
         right = float((means + errs).max()) or 1.0
         for yi, (name, r) in zip(y, rows[::-1]):
             label = f"{r.mean_lines:,.0f}"
-            if board == "standard":
+            if survived:
                 label += f"  ({r.survival_pct:.0f}% survive)"
             ax.text(r.mean_lines + ci95(r) + right * 0.02, yi, label, va="center", fontsize=8, color=TEXT_2)
         ax.set_xlim(0, right * 1.45)
         ax.set_yticks(y, names, fontsize=9, color=TEXT)
-        height, max_pieces = BOARDS[board]
-        sub = "full games" if board == "small" else f"capped at {max_pieces:,} pieces"
+        height, max_pieces = BOARDS[board][0], rows[0][1].max_pieces
+        sub = f"capped at {max_pieces:,} pieces" if survived else "full games"
         ax.set_title(f"10x{height} board ({sub})", loc="left", fontsize=10, color=TEXT)
         ax.set_facecolor(SURFACE)
         ax.tick_params(colors=TEXT_2)
@@ -156,6 +157,8 @@ def main(argv=None):
     parser.add_argument("--games", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--boards", nargs="+", choices=list(BOARDS), default=list(BOARDS))
+    parser.add_argument("--max-pieces", type=int, default=None,
+                        help="piece cap for every board (default: 100,000 small, 10,000 standard)")
     parser.add_argument("--run-dir", default="runs")
     parser.add_argument("--out-dir", default=None, help="default: --run-dir")
     parser.add_argument("--cem-checkpoint", default=None)
@@ -169,6 +172,7 @@ def main(argv=None):
         agent = make()
         for board in args.boards:
             height, max_pieces = BOARDS[board]
+            max_pieces = args.max_pieces or max_pieces
             print(f"evaluating {name} on 10x{height} ...", flush=True)
             r = evaluate_seeded(agent, args.games, args.seed, max_pieces, height)
             results.append((name, board, r))
