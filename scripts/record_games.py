@@ -105,11 +105,11 @@ def main(argv=None):
 
     data = {"seeds": [args.seed + i for i in range(args.games)], "agents": agents}
     (run_dir / "replays.json").write_text(json.dumps(data, separators=(",", ":")))
-    html = TEMPLATE.read_text()
+    html = TEMPLATE.read_text(encoding="utf-8")
     if PLACEHOLDER not in html:
         raise RuntimeError("viewer template is missing the data placeholder")
     out = run_dir / "game_viewer.html"
-    out.write_text(html.replace(PLACEHOLDER, json.dumps(data, separators=(",", ":"))))
+    out.write_text(html.replace(PLACEHOLDER, json.dumps(data, separators=(",", ":"))), encoding="utf-8")
     moves = sum(len(g["actions"]) for a in agents for g in a["games"])
     print(f"wrote {run_dir / 'replays.json'} and {out} ({moves:,} moves, {out.stat().st_size / 1e3:.0f} kB)")
 

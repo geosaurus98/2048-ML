@@ -32,7 +32,7 @@ def test_record_replays_exactly_and_matches_evaluate():
 
 def test_viewer_template_has_data_placeholder():
     rec_mod = load_record()
-    html = rec_mod.TEMPLATE.read_text()
+    html = rec_mod.TEMPLATE.read_text(encoding="utf-8")
     assert html.count(rec_mod.PLACEHOLDER) == 1
     page = html.replace(rec_mod.PLACEHOLDER, json.dumps({"seeds": [0], "agents": []}))
     assert "const DATA = {" in page
