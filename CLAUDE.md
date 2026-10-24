@@ -13,3 +13,14 @@
   and save checkpoints regularly.
 - Run pytest after every change. Commit after each milestone with a clear message.
 - Add gymnasium, torch and matplotlib to dependencies if missing.
+
+# Tetris (src/tetris/)
+- Placement Tetris: board (H, 10) uint8, row 0 at the top, 1 = filled; H = 20
+  by default but any height works. Pieces 0..6 = IOTSZJL, uniform random.
+- Actions: rotation * 10 + column, hard drop; illegal ones (rotation missing or
+  off the board) are masked. A legal placement can top out, which ends the game.
+- Reward = lines cleared. Agents expose `act(board, piece) -> action` and are
+  evaluated by src/tetris/evaluate.py with a piece cap (--max-pieces).
+- Scripts and tests for Tetris are prefixed tetris_ (the 2048 scripts import
+  each other by bare module name, so names must not collide).
+- Run outputs go to runs/tetris_*.
