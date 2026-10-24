@@ -1,0 +1,424 @@
+<title>Tetris Agent Replays</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: four wells play the same seeded deal; one placement clock drives them all. */
+:root {
+  --bg: #eef0ec;
+  --panel: #fbfcfa;
+  --ink: #1d221f;
+  --ink-2: #565e58;
+  --line: #d5dad4;
+  --well: #d9ddd5;
+  --cell: #e7eae3;
+  --accent: #2f6f5e;
+  --accent-ink: #ffffff;
+  --warn-bg: #fbe9d3;
+  --warn-ink: #7a3d00;
+  /* piece colours: categorical slots 1-7, in piece order I O T S Z J L */
+  --p0: #2a78d6; --p1: #eb6834; --p2: #1baf7a; --p3: #eda100; --p4: #e87ba4; --p5: #008300; --p6: #6250d6;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+  --rows: 20;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151917; --panel: #1d2220; --ink: #e8ece8; --ink-2: #a3aca6; --line: #2f3632;
+    --well: #2a302d; --cell: #343b37; --accent: #6cc3a8; --accent-ink: #0f1a16;
+    --warn-bg: #3d2a14; --warn-ink: #f6c98e;
+    --p0: #3987e5; --p1: #d95926; --p2: #199e70; --p3: #c98500; --p4: #d55181; --p5: #008300; --p6: #9085e9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151917; --panel: #1d2220; --ink: #e8ece8; --ink-2: #a3aca6; --line: #2f3632;
+  --well: #2a302d; --cell: #343b37; --accent: #6cc3a8; --accent-ink: #0f1a16;
+  --warn-bg: #3d2a14; --warn-ink: #f6c98e;
+  --p0: #3987e5; --p1: #d95926; --p2: #199e70; --p3: #c98500; --p4: #d55181; --p5: #008300; --p6: #9085e9;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: grid; gap: 4px; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.4rem);
+     letter-spacing: -0.02em; margin: 0; text-wrap: balance; line-height: 1.1; }
+.lede { color: var(--ink-2); margin: 0; max-width: 72ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.seeds { display: flex; flex-wrap: wrap; gap: 4px; }
+button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 10px; cursor: pointer; font-variant-numeric: tabular-nums; }
+button:hover { border-color: var(--ink-2); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#play { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 84px; font-weight: 600; }
+.speed-val, .clock { font-family: var(--font-data); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+input[type="range"] { accent-color: var(--accent); }
+#speed { width: 130px; }
+.scrub { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+#scrub { flex: 1; min-width: 0; }
+
+.warn { background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--radius); padding: 10px 14px; }
+
+.boards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.agent { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; margin: 0; line-height: 1.2; }
+.pill { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
+.pill.lead { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pill.over { border-style: dashed; }
+.ref { color: var(--ink-2); font-size: 12.5px; margin: -6px 0 0; min-height: 1.2em; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stat { display: grid; gap: 0; min-width: 0; }
+.stat .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.stat .v { font-family: var(--font-data); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.board { position: relative; background: var(--well); border-radius: 9px; padding: 5px;
+  width: min(100%, calc(60vh * 10 / var(--rows))); aspect-ratio: 10 / var(--rows); margin: 0 auto;
+  display: grid; grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(var(--rows), 1fr); gap: 2px; }
+.cell { border-radius: 2px; background: var(--cell); }
+.cell.fresh { box-shadow: inset 0 0 0 2px var(--ink); }
+.done-veil { position: absolute; inset: 0; border-radius: 9px; display: grid; place-items: center; text-align: center;
+  background: color-mix(in srgb, var(--panel) 72%, transparent); padding: 12px; }
+.done-veil strong { font-family: var(--font-display); font-size: 1.35rem; display: block; }
+.done-veil span { color: var(--ink-2); font-size: 13px; font-family: var(--font-data); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--ink-2); font-size: 12.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-data); }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+footer { color: var(--ink-2); font-size: 12.5px; max-width: 90ch; }
+footer kbd { font-family: var(--font-data); font-size: 11.5px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Tetris Agent Replays</h1>
+    <p class="lede">Four agents are dealt the same seeded pieces. Each well replays the recorded placements, one per tick, so you can watch how differently they stack.</p>
+  </header>
+
+  <div id="warn" class="warn" hidden></div>
+
+  <section class="controls" aria-label="Playback controls">
+    <div class="group">
+      <span class="label" id="seed-label">Game</span>
+      <div class="seeds" id="seeds" role="group" aria-labelledby="seed-label"></div>
+    </div>
+    <div class="group">
+      <button id="play" type="button">Play</button>
+      <button id="back" type="button" aria-label="Step back one piece">−1</button>
+      <button id="fwd" type="button" aria-label="Step forward one piece">+1</button>
+      <button id="restart" type="button">Restart</button>
+    </div>
+    <div class="group">
+      <label class="label" for="speed">Speed</label>
+      <input id="speed" type="range" min="0" max="100" value="38">
+      <span class="speed-val" id="speed-val"></span>
+    </div>
+    <div class="scrub">
+      <label class="label" for="scrub">Piece</label>
+      <input id="scrub" type="range" min="0" max="0" value="0">
+      <span class="clock" id="clock"></span>
+    </div>
+  </section>
+
+  <div class="legend" id="legend" aria-label="Piece colours"></div>
+
+  <section class="boards" id="boards" aria-live="off"></section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = /*__REPLAY_DATA__*/null;
+
+// ---- rules: the same as src/tetris/engine.py. Cells hold piece + 1 (0 = empty) so
+// the view can colour them; the engine itself only stores filled/empty.
+let W = 10, H = 20, SHAPES = [], BOTTOMS = [];
+
+function setup() {
+  W = DATA.width; H = DATA.height; SHAPES = DATA.shapes;
+  // per piece and rotation: lowest cell row in each column of the piece
+  BOTTOMS = SHAPES.map(rots => rots.map(cells => {
+    const b = [];
+    for (const [r, c] of cells) b[c] = Math.max(b[c] ?? -1, r);
+    return b;
+  }));
+}
+
+function place(board, p, a) {
+  const rot = Math.floor(a / W), col = a % W;
+  const cells = SHAPES[p][rot];
+  let row = H;
+  BOTTOMS[p][rot].forEach((bot, j) => {
+    let top = H;
+    for (let r = 0; r < H; r++) if (board[r * W + col + j]) { top = r; break; }
+    row = Math.min(row, top - 1 - bot);
+  });
+  if (row < 0) return { ok: false, board, lines: 0, fresh: [] };
+  const out = board.slice();
+  for (const [r, c] of cells) out[(row + r) * W + col + c] = p + 1;
+  const full = new Set();
+  for (let r = row; r < Math.min(H, row + 4); r++) {
+    let f = true;
+    for (let c = 0; c < W; c++) if (!out[r * W + c]) { f = false; break; }
+    if (f) full.add(r);
+  }
+  // where the piece's surviving cells end up after the clear
+  const fresh = [];
+  for (const [r, c] of cells) {
+    const rr = row + r;
+    if (full.has(rr)) continue;
+    let below = 0; for (const f of full) if (f > rr) below++;
+    fresh.push((rr + below) * W + col + c);
+  }
+  if (!full.size) return { ok: true, board: out, lines: 0, fresh };
+  const cleared = new Array(W * H).fill(0);
+  let dst = H - 1;
+  for (let r = H - 1; r >= 0; r--) {
+    if (full.has(r)) continue;
+    for (let c = 0; c < W; c++) cleared[dst * W + c] = out[r * W + c];
+    dst--;
+  }
+  return { ok: true, board: cleared, lines: full.size, fresh };
+}
+
+function stepRecord(state, game) {
+  const t = state.steps;
+  const p = +game.pieces[t];
+  const a = DATA.actionAlphabet.indexOf(game.actions[t]);
+  const r = place(state.board, p, a);
+  return { board: r.board, lines: state.lines + r.lines, steps: t + 1, placed: state.placed + (r.ok ? 1 : 0),
+           lastPiece: p, lastLines: r.lines, fresh: r.fresh, ok: r.ok };
+}
+
+function initialState() {
+  return { board: new Array(W * H).fill(0), lines: 0, steps: 0, placed: 0, lastPiece: -1, lastLines: 0,
+           fresh: [], ok: true };
+}
+
+function verifyAll() {
+  const bad = [];
+  for (const agent of DATA.agents) for (const g of agent.games) {
+    let s = initialState();
+    for (let t = 0; t < g.pieces.length; t++) {
+      s = stepRecord(s, g);
+      if (!s.ok && t !== g.pieces.length - 1) { bad.push(`${agent.name} seed ${g.seed}: topped out early at ${t + 1}`); break; }
+    }
+    const final = s.board.map(v => (v ? 1 : 0)).join();
+    if (s.lines !== g.lines || final !== g.final.join() || s.ok === g.topped_out)
+      bad.push(`${agent.name} seed ${g.seed}: replay differs from recording`);
+  }
+  return bad;
+}
+
+function stackHeight(board) {
+  for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (board[r * W + c]) return H - r;
+  return 0;
+}
+
+// ---- view
+const els = {
+  seeds: document.getElementById("seeds"), boards: document.getElementById("boards"),
+  play: document.getElementById("play"), back: document.getElementById("back"), fwd: document.getElementById("fwd"),
+  restart: document.getElementById("restart"), speed: document.getElementById("speed"),
+  speedVal: document.getElementById("speed-val"), scrub: document.getElementById("scrub"),
+  clock: document.getElementById("clock"), warn: document.getElementById("warn"), foot: document.getElementById("foot"),
+  legend: document.getElementById("legend"),
+};
+const fmt = n => n.toLocaleString("en-US");
+
+let gameIdx = 0, t = 0, playing = false, carry = 0, lastTs = 0;
+let states = [];   // per agent: state after min(t, len) placements
+let cards = [];
+
+function speedPiecesPerSec() {
+  // 0..100 on a log scale: 1 to 1000 pieces per second
+  return Math.round(10 ** (els.speed.value / 100 * 3));
+}
+function maxLen() { return Math.max(...DATA.agents.map(a => a.games[gameIdx].pieces.length)); }
+
+function buildSeeds() {
+  els.seeds.innerHTML = "";
+  DATA.seeds.forEach((seed, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = `Seed ${seed}`; b.id = `seed-${seed}`;
+    b.setAttribute("aria-pressed", String(i === gameIdx));
+    b.addEventListener("click", () => selectGame(i));
+    els.seeds.append(b);
+  });
+}
+
+function buildLegend() {
+  els.legend.innerHTML = [...DATA.pieceNames].map((n, p) => `<span><i style="background: var(--p${p})"></i>${n}</span>`).join("")
+    + `<span><i style="box-shadow: inset 0 0 0 2px var(--ink)"></i>last placed</span>`;
+}
+
+function summaryText(sum) {
+  if (!sum) return "";
+  const base = `Over ${fmt(sum.games)} games: mean ${fmt(Math.round(sum.mean))} lines`;
+  return sum.survival > 0 ? `${base}, ${sum.survival}% survive ${fmt(sum.maxPieces)} pieces` : base;
+}
+
+function buildCards() {
+  els.boards.innerHTML = "";
+  document.documentElement.style.setProperty("--rows", H);
+  cards = DATA.agents.map(agent => {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-head"><h2 class="agent"></h2><span class="pill"></span></div>
+      <p class="ref"></p>
+      <div class="stats">
+        <div class="stat"><span class="k">Lines</span><span class="v" data-k="lines"></span></div>
+        <div class="stat"><span class="k">Pieces</span><span class="v" data-k="pieces"></span></div>
+        <div class="stat"><span class="k">Height</span><span class="v" data-k="height"></span></div>
+        <div class="stat"><span class="k">Last</span><span class="v" data-k="last"></span></div>
+      </div>
+      <div class="board"></div>`;
+    card.querySelector(".agent").textContent = agent.name;
+    card.querySelector(".ref").textContent = summaryText(agent.summary);
+    const board = card.querySelector(".board");
+    const cells = [];
+    for (let i = 0; i < W * H; i++) { const d = document.createElement("div"); d.className = "cell"; board.append(d); cells.push(d); }
+    const veil = document.createElement("div"); veil.className = "done-veil"; veil.hidden = true; board.append(veil);
+    els.boards.append(card);
+    return { card, cells, veil, pill: card.querySelector(".pill"),
+             v: Object.fromEntries([...card.querySelectorAll("[data-k]")].map(e => [e.dataset.k, e])) };
+  });
+}
+
+function recompute() {
+  states = DATA.agents.map(agent => {
+    const g = agent.games[gameIdx];
+    let s = initialState();
+    const upto = Math.min(t, g.pieces.length);
+    for (let k = 0; k < upto; k++) s = stepRecord(s, g);
+    return s;
+  });
+}
+
+function advance(n) {
+  const len = maxLen();
+  for (let k = 0; k < n && t < len; k++) {
+    t++;
+    DATA.agents.forEach((agent, i) => {
+      const g = agent.games[gameIdx];
+      if (states[i].steps < g.pieces.length) states[i] = stepRecord(states[i], g);
+    });
+  }
+  if (t >= len) setPlaying(false);
+}
+
+function render() {
+  const len = maxLen();
+  els.scrub.max = len; els.scrub.value = t;
+  els.clock.textContent = `${fmt(t)} / ${fmt(len)}`;
+  const best = Math.max(...states.map(s => s.lines));
+  states.forEach((s, i) => {
+    const c = cards[i], g = DATA.agents[i].games[gameIdx];
+    const finished = s.steps >= g.pieces.length;
+    c.v.lines.textContent = fmt(s.lines);
+    c.v.pieces.textContent = fmt(s.placed);
+    c.v.height.textContent = String(stackHeight(s.board));
+    c.v.last.textContent = s.lastPiece < 0 ? "–" : `${DATA.pieceNames[s.lastPiece]}${s.lastLines ? " +" + s.lastLines : ""}`;
+    const leading = best > 0 && s.lines === best && states.filter(x => x.lines === best).length === 1;
+    const endLabel = g.topped_out ? "Topped out" : "Survived";
+    c.pill.textContent = finished ? endLabel : leading ? "Leading" : "Playing";
+    c.pill.className = "pill" + (finished ? " over" : leading ? " lead" : "");
+    const fresh = new Set(s.fresh);
+    s.board.forEach((v, k) => {
+      const el = c.cells[k];
+      el.style.background = v ? `var(--p${v - 1})` : "";
+      el.classList.toggle("fresh", fresh.has(k) && !finished);
+    });
+    c.veil.hidden = !finished;
+    if (finished) {
+      const why = g.topped_out ? "Topped out" : `Survived ${fmt(DATA.maxPieces)} pieces`;
+      c.veil.innerHTML = `<div><strong>${why}</strong><span>${fmt(s.lines)} lines · ${fmt(s.placed)} pieces</span></div>`;
+    }
+    c.card.setAttribute("aria-label", `${DATA.agents[i].name}: ${fmt(s.lines)} lines, ${finished ? endLabel.toLowerCase() : "playing"}`);
+  });
+}
+
+function setPlaying(p) {
+  playing = p;
+  els.play.textContent = p ? "Pause" : t >= maxLen() ? "Replay" : "Play";
+  if (p) { lastTs = 0; carry = 0; requestAnimationFrame(tick); }
+}
+
+function tick(ts) {
+  if (!playing) return;
+  if (lastTs) {
+    carry += (ts - lastTs) / 1000 * speedPiecesPerSec();
+    const n = Math.floor(carry);
+    if (n > 0) { carry -= n; advance(n); render(); }
+  }
+  lastTs = ts;
+  if (playing) requestAnimationFrame(tick);
+}
+
+function selectGame(i) {
+  gameIdx = i; t = 0; recompute();
+  [...els.seeds.children].forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
+  render();
+}
+
+function seek(target) {
+  t = Math.max(0, Math.min(maxLen(), target)); recompute(); render();
+}
+
+function updateSpeedLabel() { els.speedVal.textContent = `${fmt(speedPiecesPerSec())} pieces/s`; }
+
+function start(saved) {
+  if (!DATA) { els.warn.hidden = false; els.warn.textContent = "No recorded games were embedded in this page."; return; }
+  setup();
+  const bad = verifyAll();
+  if (bad.length) { els.warn.hidden = false; els.warn.textContent = `Replay check failed: ${bad.slice(0, 3).join("; ")}`; }
+  gameIdx = Math.min(saved.gameIdx ?? 0, DATA.seeds.length - 1);
+  if (saved.speed != null) els.speed.value = saved.speed;
+  buildSeeds(); buildLegend(); buildCards(); updateSpeedLabel();
+  t = 0; recompute();
+  if (saved.t) t = Math.min(saved.t, maxLen()), recompute();
+  render();
+  els.foot.innerHTML = `Recorded from the trained agents in this repo (<code>scripts/tetris_record_games.py</code>) on a 10×${H} board, capped at ${fmt(DATA.maxPieces)} pieces; every replay is re-simulated and checked against its recorded final board on load. Game <em>i</em> deals the same piece sequence to every agent. Keys: <kbd>Space</kbd> play/pause, <kbd>←</kbd> <kbd>→</kbd> step.`;
+  setPlaying(!!saved.playing);
+}
+
+els.play.addEventListener("click", () => {
+  if (!playing && t >= maxLen()) { seek(0); }
+  setPlaying(!playing);
+});
+els.back.addEventListener("click", () => { setPlaying(false); seek(t - 1); });
+els.fwd.addEventListener("click", () => { setPlaying(false); advance(1); render(); });
+els.restart.addEventListener("click", () => { seek(0); setPlaying(true); });
+els.speed.addEventListener("input", updateSpeedLabel);
+els.scrub.addEventListener("input", () => seek(+els.scrub.value));
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.code === "Space") { e.preventDefault(); els.play.click(); }
+  else if (e.key === "ArrowRight" && e.target.type !== "range") { e.preventDefault(); els.fwd.click(); }
+  else if (e.key === "ArrowLeft" && e.target.type !== "range") { e.preventDefault(); els.back.click(); }
+});
+
+window.claude?.hot?.snapshot?.(() => ({ gameIdx, t, speed: els.speed.value, playing }));
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
