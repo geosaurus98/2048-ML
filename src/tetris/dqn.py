@@ -40,8 +40,10 @@ N_INPUTS = 2 * WIDTH + 2
 
 @dataclass
 class DQNConfig:
-    gamma: float = 0.99
-    lr: float = 1e-3
+    # gamma 0.99 / lr 1e-3 learned faster but swung between ~20 and ~1,000 lines from
+    # one checkpoint to the next; this pair improved steadily in a 4-minute sweep.
+    gamma: float = 0.95
+    lr: float = 2.5e-4
     batch_size: int = 512
     buffer_size: int = 100_000
     learning_starts: int = 2_000
